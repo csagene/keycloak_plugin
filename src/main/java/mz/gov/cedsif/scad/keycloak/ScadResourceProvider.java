@@ -87,15 +87,38 @@ public class ScadResourceProvider implements RealmResourceProvider {
         logger.info(String.format("Token gerado com sucesso para o banco '%s' [Escopo: %s]: %s", 
                 nomeBanco, escopo, tokenFinal));
 
-        // 7. Enviar o SMS real de forma assíncrona usando o Gateway Telerivet
-        enviarSMSViaTelerivet(request.getNumeroTelefone(), tokenFinal);
+        // 7. Determinar se o contacto é um Email ou um Número de Telefone
+        String contacto = request.getContacto();
+        String contactoMascarado = contacto;
+        boolean isEmail = false;
 
-        // 8. Construir a resposta JSON simplificada contendo apenas Token, NUIT e mensagem de confirmação
-        String numeroMascarado = request.getNumeroTelefone();
-        if (numeroMascarado != null && numeroMascarado.length() > 6) {
-            numeroMascarado = numeroMascarado.substring(0, 5) + "****" + numeroMascarado.substring(numeroMascarado.length() - 2);
+        if (contacto != null) {
+            contacto = contacto.trim();
+            if (contacto.contains("@")) {
+                isEmail = true;
+                // Mascarar email (ex: ciprianosagene@gmail.com -> c***e@gmail.com)
+                int atIndex = contacto.indexOf("@");
+                if (atIndex > 2) {
+                    contactoMascarado = contacto.charAt(0) + "***" + contacto.charAt(atIndex - 1) + contacto.substring(atIndex);
+                }
+            } else {
+                // Mascarar número de telefone (ex: 258847392871 -> 25884****71)
+                if (contacto.length() > 6) {
+                    contactoMascarado = contacto.substring(0, 5) + "****" + contacto.substring(contacto.length() - 2);
+                }
+            }
         }
-        String mensagemConfirmacao = "O token foi enviado com sucesso via SMS para o numero " + numeroMascarado;
+
+        // 8. Enviar o token via SMS (Telerivet) ou Email (SMTP Keycloak)
+        if (isEmail) {
+            enviarEmail(contacto, tokenFinal);
+        } else {
+            enviarSMSViaTelerivet(contacto, tokenFinal);
+        }
+
+        // 9. Construir a resposta JSON simplificada contendo apenas Token, NUIT e mensagem de confirmação
+        String meioEnvio = isEmail ? "email" : "SMS";
+        String mensagemConfirmacao = String.format("O token foi enviado com sucesso via %s para o contacto %s", meioEnvio, contactoMascarado);
 
         ScadTokenResponse response = new ScadTokenResponse(
                 tokenFinal, 
@@ -154,7 +177,54 @@ public class ScadResourceProvider implements RealmResourceProvider {
             logger.log(java.util.logging.Level.SEVERE, "TELERIVET: Falha ao construir chamada de SMS", e);
         }
     }
+    private void enviarEmail(String email, String token) {
+        String apiKey = TELERIVET_API_KEY;
+        String projectId = TELERIVET_PROJECT_ID;
 
+        // Se as credenciais estiverem no padrão (não configuradas), apenas simulamos o envio
+        if ("SUA_API_KEY_AQUI".equals(apiKey) || "SEU_PROJECT_ID_AQUI".equals(projectId)) {
+            logger.warning("TELERIVET EMAIL: Credenciais nao configuradas. Simulando envio de Email...");
+            logger.info(String.format("SIMULAÇÃO EMAIL -> Enviado para %s: 'O seu token SCAD e %s. Valido por 10 min.'", 
+                    email, token));
+            return;
+        }
+
+        String mensagem = "O seu token SCAD e " + token + ". Valido por 10 min.";
+        
+        try {
+            // Telerivet envia o email se a rota correspondente (Email Route) estiver ativa
+            String jsonPayload = String.format("{\"to_number\":\"%s\", \"content\":\"%s\"}", email, mensagem);
+
+            // Basic Auth Header encoding (username = api_key, password = vazio)
+            String rawAuth = apiKey + ":";
+            String authHeader = "Basic " + Base64.getEncoder().encodeToString(rawAuth.getBytes(StandardCharsets.UTF_8));
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.telerivet.com/v1/projects/" + projectId + "/messages/send"))
+                    .header("Authorization", authHeader)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            // Executar requisição assíncrona (não-bloqueante para o Keycloak)
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                            logger.info("TELERIVET EMAIL: Email enviado com sucesso para " + email + " | Status: " + response.statusCode());
+                        } else {
+                            logger.severe("TELERIVET EMAIL: Falha ao enviar email. Status: " + response.statusCode() + " | Resposta: " + response.body());
+                        }
+                    })
+                    .exceptionally(ex -> {
+                        logger.log(java.util.logging.Level.SEVERE, "TELERIVET EMAIL: Erro na conexao com a API", ex);
+                        return null;
+                    });
+
+        } catch (Exception e) {
+            logger.log(java.util.logging.Level.SEVERE, "TELERIVET EMAIL: Falha ao construir chamada de Email", e);
+        }
+    }
     @Override
     public void close() {
         // Liberação de conexões ou recursos se aplicável

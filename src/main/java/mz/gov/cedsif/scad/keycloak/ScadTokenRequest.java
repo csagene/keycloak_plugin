@@ -6,7 +6,7 @@ public class ScadTokenRequest implements Serializable {
     private String escopo;
     private String nuit;
     private String organico;
-    private String numeroTelefone;
+    private String contacto;
 
     public ScadTokenRequest() {
     }
@@ -35,11 +35,11 @@ public class ScadTokenRequest implements Serializable {
         this.organico = organico;
     }
 
-    public String getNumeroTelefone() {
-        return numeroTelefone;
+    public String getContacto() {
+        return contacto;
     }
 
-    public void setNumeroTelefone(String numeroTelefone) {
-        this.numeroTelefone = numeroTelefone;
+    public void setContacto(String contacto) {
+        this.contacto = contacto;
     }
 }
