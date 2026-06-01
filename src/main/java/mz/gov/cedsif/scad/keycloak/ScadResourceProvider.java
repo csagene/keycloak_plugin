@@ -9,6 +9,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.security.SecureRandom;
 import java.util.logging.Logger;
+import java.util.concurrent.CompletableFuture;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -160,45 +161,33 @@ public class ScadResourceProvider implements RealmResourceProvider {
     }
 
     private void enviarEmail(String email, String token) {
-        String apiKey = TELERIVET_API_KEY;
-        String projectId = TELERIVET_PROJECT_ID;
-
-        if ("SUA_API_KEY_AQUI".equals(apiKey) || "SEU_PROJECT_ID_AQUI".equals(projectId)) {
-            logger.warning("TELERIVET EMAIL: Credenciais nao configuradas. Simulando envio de Email...");
-            logger.info(String.format("SIMULACAO EMAIL -> Enviado para %s: 'O seu token SCAD e %s.'", email, token));
-            return;
-        }
-
-        String mensagem = "O seu token SCAD e " + token + ". Valido por 10 min.";
-        
         try {
-            String jsonPayload = String.format("{\"to_number\":\"%s\", \"content\":\"%s\"}", email, mensagem);
-            String rawAuth = apiKey + ":";
-            String authHeader = "Basic " + Base64.getEncoder().encodeToString(rawAuth.getBytes(StandardCharsets.UTF_8));
+            org.keycloak.email.EmailSenderProvider emailSender = session.getProvider(org.keycloak.email.EmailSenderProvider.class);
+            java.util.Map<String, String> config = session.getContext().getRealm().getSmtpConfig();
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.telerivet.com/v1/projects/" + projectId + "/messages/send"))
-                    .header("Authorization", authHeader)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                    .build();
+            // Se o SMTP não estiver configurado no Realm do Keycloak, simulamos o envio no log
+            if (config == null || config.isEmpty() || !config.containsKey("host")) {
+                logger.warning("SMTP nao configurado no Keycloak Realm. Simulando envio de Email...");
+                logger.info(String.format("SIMULACAO EMAIL -> Enviado para %s: 'O seu token SCAD e %s.'", email, token));
+                return;
+            }
 
-            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenAccept(response -> {
-                        if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                            logger.info("TELERIVET EMAIL: Email enviado com sucesso para " + email + " | Status: " + response.statusCode());
-                        } else {
-                            logger.severe("TELERIVET EMAIL: Falha ao enviar email. Status: " + response.statusCode() + " | Resposta: " + response.body());
-                        }
-                    })
-                    .exceptionally(ex -> {
-                        logger.log(java.util.logging.Level.SEVERE, "TELERIVET EMAIL: Erro na conexao com a API", ex);
-                        return null;
-                    });
+            // Executar envio de forma assíncrona para não bloquear a resposta REST
+            CompletableFuture.runAsync(() -> {
+                try {
+                    emailSender.send(config, 
+                                     email, 
+                                     "Servico SCAD - Token de Autorizacao", 
+                                     "O seu token SCAD e: " + token, 
+                                     "O seu token SCAD e: " + token);
+                    logger.info("EMAIL: Token enviado com sucesso via SMTP do Keycloak para " + email);
+                } catch (Exception e) {
+                    logger.log(java.util.logging.Level.SEVERE, "EMAIL: Falha ao enviar email via SMTP", e);
+                }
+            });
 
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.SEVERE, "TELERIVET EMAIL: Falha ao construir chamada de Email", e);
+            logger.log(java.util.logging.Level.SEVERE, "EMAIL: Falha ao inicializar servico de email do Keycloak", e);
         }
     }
 
