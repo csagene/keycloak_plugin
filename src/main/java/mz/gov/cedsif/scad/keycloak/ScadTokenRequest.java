@@ -5,7 +5,7 @@ import java.io.Serializable;
 public class ScadTokenRequest implements Serializable {
     private String scope;
     private String nuit;
-    private String organic;
+    private String organicCode;
     private String contact;
 
     public ScadTokenRequest() {
@@ -27,12 +27,12 @@ public class ScadTokenRequest implements Serializable {
         this.nuit = nuit;
     }
 
-    public String getOrganic() {
-        return organic;
+    public String getOrganicCode() {
+        return organicCode;
     }
 
-    public void setOrganic(String organic) {
-        this.organic = organic;
+    public void setOrganicCode(String organicCode) {
+        this.organicCode = organicCode;
     }
 
     public String getContact() {

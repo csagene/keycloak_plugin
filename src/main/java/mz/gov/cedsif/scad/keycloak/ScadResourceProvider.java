@@ -114,7 +114,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
             java.util.Map<String, String> tokenDetails = new java.util.HashMap<>();
             tokenDetails.put("nuit", request.getNuit() != null ? request.getNuit() : "");
             tokenDetails.put("contact", request.getContact() != null ? request.getContact() : "");
-            tokenDetails.put("organic", request.getOrganic() != null ? request.getOrganic() : "");
+            tokenDetails.put("organicCode", request.getOrganicCode() != null ? request.getOrganicCode() : "");
             tokenDetails.put("scope", request.getScope() != null ? request.getScope() : "");
             tokenDetails.put("bank", bankName);
             tokenDetails.put("clientId", clientId);
@@ -188,7 +188,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
                     true,
                     tokenDetails.getOrDefault("nuit", ""),
                     tokenDetails.getOrDefault("contact", ""),
-                    tokenDetails.getOrDefault("organic", ""),
+                    tokenDetails.getOrDefault("organicCode", ""),
                     tokenDetails.getOrDefault("scope", ""),
                     tokenDetails.getOrDefault("bank", ""),
                     tokenDetails.getOrDefault("clientId", ""),

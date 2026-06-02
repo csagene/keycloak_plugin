@@ -7,7 +7,7 @@ public class ScadTokenValidationResponse implements Serializable {
     private boolean valid;
     private String nuit;
     private String contact;
-    private String organic;
+    private String organicCode;
     private String scope;
     private String bank;
     private String clientId;
@@ -18,13 +18,13 @@ public class ScadTokenValidationResponse implements Serializable {
     }
 
     public ScadTokenValidationResponse(String token, boolean valid, String nuit, String contact, 
-                                        String organic, String scope, String bank, String clientId, 
+                                        String organicCode, String scope, String bank, String clientId, 
                                         String generationTimestamp, String message) {
         this.token = token;
         this.valid = valid;
         this.nuit = nuit;
         this.contact = contact;
-        this.organic = organic;
+        this.organicCode = organicCode;
         this.scope = scope;
         this.bank = bank;
         this.clientId = clientId;
@@ -64,12 +64,12 @@ public class ScadTokenValidationResponse implements Serializable {
         this.contact = contact;
     }
 
-    public String getOrganic() {
-        return organic;
+    public String getOrganicCode() {
+        return organicCode;
     }
 
-    public void setOrganic(String organic) {
-        this.organic = organic;
+    public void setOrganicCode(String organicCode) {
+        this.organicCode = organicCode;
     }
 
     public String getScope() {
