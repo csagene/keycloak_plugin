@@ -108,6 +108,32 @@ public class ScadResourceProvider implements RealmResourceProvider {
         String meioEnvio = isEmail ? "email" : "SMS";
         String mensagemConfirmacao = String.format("O token foi enviado com sucesso via %s para o contacto %s", meioEnvio, contactoMascarado);
 
+        // Guardar token no SingleUseObjectProvider (Keycloak Cache de Uso Único)
+        try {
+            org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
+            java.util.Map<String, String> tokenDetails = new java.util.HashMap<>();
+            tokenDetails.put("nuit", request.getNuit() != null ? request.getNuit() : "");
+            tokenDetails.put("contacto", request.getContacto() != null ? request.getContacto() : "");
+            tokenDetails.put("organico", request.getOrganico() != null ? request.getOrganico() : "");
+            tokenDetails.put("escopo", request.getEscopo() != null ? request.getEscopo() : "");
+            tokenDetails.put("banco", nomeBanco);
+            tokenDetails.put("clientId", clientId);
+            tokenDetails.put("timestamp", String.valueOf(System.currentTimeMillis()));
+
+            // Token válido por 10 minutos (600 segundos)
+            long lifespanSeconds = 600;
+            String storeKey = "scad-token:" + tokenFinal;
+            singleUseObjects.put(storeKey, lifespanSeconds, tokenDetails);
+            
+            logger.info("Token persistido no SingleUseObjectProvider (Uso Unico) com chave: " + storeKey);
+        } catch (Exception e) {
+            logger.log(java.util.logging.Level.SEVERE, "Falha ao persistir token no SingleUseObjectProvider", e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("{\"error\": \"Falha interna ao persistir o token no cache de uso unico\"}")
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        }
+
         ScadTokenResponse response = new ScadTokenResponse(
                 tokenFinal, 
                 request.getNuit(),
@@ -115,6 +141,70 @@ public class ScadResourceProvider implements RealmResourceProvider {
         );
 
         return Response.ok(response).build();
+    }
+
+    @POST
+    @Path("/tokens/validate")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response validateToken(ScadTokenValidationRequest request) {
+        ClientModel client = session.getContext().getClient();
+        if (client == null) {
+            logger.warning("Tentativa de validacao de token por cliente nao autenticado.");
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity("{\"error\": \"Cliente nao autenticado via OAuth2 M2M\"}")
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        }
+
+        if (request == null || request.getToken() == null || request.getToken().trim().isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("{\"error\": \"Token nao fornecido\"}")
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        }
+
+        String token = request.getToken().trim();
+        String storeKey = "scad-token:" + token;
+
+        try {
+            org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
+            
+            // Consome o token atomicamente (remove retorna os dados se existiam, null se ja foi consumido ou expirou)
+            java.util.Map<String, String> tokenDetails = singleUseObjects.remove(storeKey);
+
+            if (tokenDetails == null || tokenDetails.isEmpty()) {
+                logger.warning("Token invalido, expirado ou ja consumido: " + token);
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("{\"error\": \"Token invalido, expirado ou ja consumido\"}")
+                        .type(MediaType.APPLICATION_JSON)
+                        .build();
+            }
+
+            logger.info("Token validado e consumido com sucesso (Single-Use): " + token);
+
+            ScadTokenValidationResponse response = new ScadTokenValidationResponse(
+                    token,
+                    true,
+                    tokenDetails.getOrDefault("nuit", ""),
+                    tokenDetails.getOrDefault("contacto", ""),
+                    tokenDetails.getOrDefault("organico", ""),
+                    tokenDetails.getOrDefault("escopo", ""),
+                    tokenDetails.getOrDefault("banco", ""),
+                    tokenDetails.getOrDefault("clientId", ""),
+                    tokenDetails.getOrDefault("timestamp", ""),
+                    "Token validado e consumido com sucesso. Este token nao podera ser reutilizado."
+            );
+
+            return Response.ok(response).build();
+
+        } catch (Exception e) {
+            logger.log(java.util.logging.Level.SEVERE, "Erro ao validar/remover token do SingleUseObjectProvider", e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("{\"error\": \"Erro interno ao processar a validacao do token\"}")
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        }
     }
 
     private void enviarSMSViaTelerivet(String telefone, String token) {
