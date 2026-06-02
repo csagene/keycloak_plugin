@@ -5,15 +5,15 @@ import java.io.Serializable;
 public class ScadTokenResponse implements Serializable {
     private String token;
     private String nuit;
-    private String mensagem;
+    private String message;
 
     public ScadTokenResponse() {
     }
 
-    public ScadTokenResponse(String token, String nuit, String mensagem) {
+    public ScadTokenResponse(String token, String nuit, String message) {
         this.token = token;
         this.nuit = nuit;
-        this.mensagem = mensagem;
+        this.message = message;
     }
 
     public String getToken() {
@@ -32,11 +32,11 @@ public class ScadTokenResponse implements Serializable {
         this.nuit = nuit;
     }
 
-    public String getMensagem() {
-        return mensagem;
+    public String getMessage() {
+        return message;
     }
 
-    public void setMensagem(String mensagem) {
-        this.mensagem = mensagem;
+    public void setMessage(String message) {
+        this.message = message;
     }
 }

@@ -42,102 +42,102 @@ public class ScadResourceProvider implements RealmResourceProvider {
     public Response generateToken(ScadTokenRequest request) {
         ClientModel client = session.getContext().getClient();
         if (client == null) {
-            logger.warning("Tentativa de geracao de token por cliente nao autenticado.");
+            logger.warning("Token generation attempt by unauthenticated client.");
             return Response.status(Response.Status.UNAUTHORIZED)
-                    .entity("{\"error\": \"Cliente nao autenticado via OAuth2 M2M\"}")
+                    .entity("{\"error\": \"Client not authenticated via OAuth2 M2M\"}")
                     .type(MediaType.APPLICATION_JSON)
                     .build();
         }
 
         String clientId = client.getClientId();
-        String nomeBanco = clientId.replace("-app", "")
-                                   .replace("-client", "")
-                                   .replace("-prod", "")
-                                   .toLowerCase();
+        String bankName = clientId.replace("-app", "")
+                                  .replace("-client", "")
+                                  .replace("-prod", "")
+                                  .toLowerCase();
 
-        String escopo = request.getEscopo();
-        String tipoOperacao = "scad";
-        if (escopo != null && !escopo.trim().isEmpty()) {
-            String escopoClean = escopo.trim().toLowerCase();
-            if (escopoClean.length() >= 4) {
-                tipoOperacao = escopoClean.substring(0, 4);
+        String scope = request.getScope();
+        String operationType = "scad";
+        if (scope != null && !scope.trim().isEmpty()) {
+            String scopeClean = scope.trim().toLowerCase();
+            if (scopeClean.length() >= 4) {
+                operationType = scopeClean.substring(0, 4);
             } else {
-                tipoOperacao = escopoClean;
+                operationType = scopeClean;
             }
         }
 
-        String prefixo = tipoOperacao + nomeBanco;
+        String prefix = operationType + bankName;
 
         String charset = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
         SecureRandom random = new SecureRandom();
-        StringBuilder parteAleatoria = new StringBuilder(6);
+        StringBuilder randomPart = new StringBuilder(6);
         for (int i = 0; i < 6; i++) {
-            parteAleatoria.append(charset.charAt(random.nextInt(charset.length())));
+            randomPart.append(charset.charAt(random.nextInt(charset.length())));
         }
 
-        String tokenFinal = prefixo + "-" + parteAleatoria.toString();
+        String finalToken = prefix + "-" + randomPart.toString();
 
-        logger.info(String.format("Token gerado com sucesso para o banco '%s' [Escopo: %s]: %s", 
-                nomeBanco, escopo, tokenFinal));
+        logger.info(String.format("Token successfully generated for bank '%s' [Scope: %s]: %s", 
+                bankName, scope, finalToken));
 
-        String contacto = request.getContacto();
-        String contactoMascarado = contacto;
+        String contact = request.getContact();
+        String maskedContact = contact;
         boolean isEmail = false;
 
-        if (contacto != null) {
-            contacto = contacto.trim();
-            if (contacto.contains("@")) {
+        if (contact != null) {
+            contact = contact.trim();
+            if (contact.contains("@")) {
                 isEmail = true;
-                int atIndex = contacto.indexOf("@");
+                int atIndex = contact.indexOf("@");
                 if (atIndex > 2) {
-                    contactoMascarado = contacto.charAt(0) + "***" + contacto.charAt(atIndex - 1) + contacto.substring(atIndex);
+                    maskedContact = contact.charAt(0) + "***" + contact.charAt(atIndex - 1) + contact.substring(atIndex);
                 }
             } else {
-                if (contacto.length() > 6) {
-                    contactoMascarado = contacto.substring(0, 5) + "****" + contacto.substring(contacto.length() - 2);
+                if (contact.length() > 6) {
+                    maskedContact = contact.substring(0, 5) + "****" + contact.substring(contact.length() - 2);
                 }
             }
         }
 
         if (isEmail) {
-            enviarEmail(contacto, tokenFinal);
+            enviarEmail(contact, finalToken);
         } else {
-            enviarSMSViaTelerivet(contacto, tokenFinal);
+            enviarSMSViaTelerivet(contact, finalToken);
         }
 
-        String meioEnvio = isEmail ? "email" : "SMS";
-        String mensagemConfirmacao = String.format("O token foi enviado com sucesso via %s para o contacto %s", meioEnvio, contactoMascarado);
+        String deliveryMethod = isEmail ? "email" : "SMS";
+        String confirmationMessage = String.format("The token was successfully sent via %s to contact %s", deliveryMethod, maskedContact);
 
         // Guardar token no SingleUseObjectProvider (Keycloak Cache de Uso Único)
         try {
             org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
             java.util.Map<String, String> tokenDetails = new java.util.HashMap<>();
             tokenDetails.put("nuit", request.getNuit() != null ? request.getNuit() : "");
-            tokenDetails.put("contacto", request.getContacto() != null ? request.getContacto() : "");
-            tokenDetails.put("organico", request.getOrganico() != null ? request.getOrganico() : "");
-            tokenDetails.put("escopo", request.getEscopo() != null ? request.getEscopo() : "");
-            tokenDetails.put("banco", nomeBanco);
+            tokenDetails.put("contact", request.getContact() != null ? request.getContact() : "");
+            tokenDetails.put("organic", request.getOrganic() != null ? request.getOrganic() : "");
+            tokenDetails.put("scope", request.getScope() != null ? request.getScope() : "");
+            tokenDetails.put("bank", bankName);
             tokenDetails.put("clientId", clientId);
             tokenDetails.put("timestamp", String.valueOf(System.currentTimeMillis()));
 
             // Token válido por 10 minutos (600 segundos)
             long lifespanSeconds = 600;
-            String storeKey = "scad-token:" + tokenFinal;
+            String storeKey = "scad-token:" + finalToken;
             singleUseObjects.put(storeKey, lifespanSeconds, tokenDetails);
             
-            logger.info("Token persistido no SingleUseObjectProvider (Uso Unico) com chave: " + storeKey);
+            logger.info("Token persisted in SingleUseObjectProvider (Single Use) with key: " + storeKey);
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.SEVERE, "Falha ao persistir token no SingleUseObjectProvider", e);
+            logger.log(java.util.logging.Level.SEVERE, "Failed to persist token in SingleUseObjectProvider", e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("{\"error\": \"Falha interna ao persistir o token no cache de uso unico\"}")
+                    .entity("{\"error\": \"Internal failure persisting the token in the single-use cache\"}")
                     .type(MediaType.APPLICATION_JSON)
                     .build();
         }
 
         ScadTokenResponse response = new ScadTokenResponse(
-                tokenFinal, 
+                finalToken, 
                 request.getNuit(),
-                mensagemConfirmacao
+                confirmationMessage
         );
 
         return Response.ok(response).build();
@@ -150,16 +150,16 @@ public class ScadResourceProvider implements RealmResourceProvider {
     public Response validateToken(ScadTokenValidationRequest request) {
         ClientModel client = session.getContext().getClient();
         if (client == null) {
-            logger.warning("Tentativa de validacao de token por cliente nao autenticado.");
+            logger.warning("Token validation attempt by unauthenticated client.");
             return Response.status(Response.Status.UNAUTHORIZED)
-                    .entity("{\"error\": \"Cliente nao autenticado via OAuth2 M2M\"}")
+                    .entity("{\"error\": \"Client not authenticated via OAuth2 M2M\"}")
                     .type(MediaType.APPLICATION_JSON)
                     .build();
         }
 
         if (request == null || request.getToken() == null || request.getToken().trim().isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("{\"error\": \"Token nao fornecido\"}")
+                    .entity("{\"error\": \"Token not provided\"}")
                     .type(MediaType.APPLICATION_JSON)
                     .build();
         }
@@ -170,38 +170,38 @@ public class ScadResourceProvider implements RealmResourceProvider {
         try {
             org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
             
-            // Consome o token atomicamente (remove retorna os dados se existiam, null se ja foi consumido ou expirou)
+            // Consumes the token atomically (remove returns the data if it existed, null if already consumed or expired)
             java.util.Map<String, String> tokenDetails = singleUseObjects.remove(storeKey);
 
             if (tokenDetails == null || tokenDetails.isEmpty()) {
-                logger.warning("Token invalido, expirado ou ja consumido: " + token);
+                logger.warning("Token is invalid, expired, or already consumed: " + token);
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("{\"error\": \"Token invalido, expirado ou ja consumido\"}")
+                        .entity("{\"error\": \"Token invalid, expired, or already consumed\"}")
                         .type(MediaType.APPLICATION_JSON)
                         .build();
             }
 
-            logger.info("Token validado e consumido com sucesso (Single-Use): " + token);
+            logger.info("Token successfully validated and consumed (Single-Use): " + token);
 
             ScadTokenValidationResponse response = new ScadTokenValidationResponse(
                     token,
                     true,
                     tokenDetails.getOrDefault("nuit", ""),
-                    tokenDetails.getOrDefault("contacto", ""),
-                    tokenDetails.getOrDefault("organico", ""),
-                    tokenDetails.getOrDefault("escopo", ""),
-                    tokenDetails.getOrDefault("banco", ""),
+                    tokenDetails.getOrDefault("contact", ""),
+                    tokenDetails.getOrDefault("organic", ""),
+                    tokenDetails.getOrDefault("scope", ""),
+                    tokenDetails.getOrDefault("bank", ""),
                     tokenDetails.getOrDefault("clientId", ""),
                     tokenDetails.getOrDefault("timestamp", ""),
-                    "Token validado e consumido com sucesso. Este token nao podera ser reutilizado."
+                    "Token validated and consumed successfully. This token cannot be reused."
             );
 
             return Response.ok(response).build();
 
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.SEVERE, "Erro ao validar/remover token do SingleUseObjectProvider", e);
+            logger.log(java.util.logging.Level.SEVERE, "Error validating/removing token from SingleUseObjectProvider", e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("{\"error\": \"Erro interno ao processar a validacao do token\"}")
+                    .entity("{\"error\": \"Internal error processing token validation\"}")
                     .type(MediaType.APPLICATION_JSON)
                     .build();
         }

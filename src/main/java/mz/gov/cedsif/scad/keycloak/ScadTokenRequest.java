@@ -3,20 +3,20 @@ package mz.gov.cedsif.scad.keycloak;
 import java.io.Serializable;
 
 public class ScadTokenRequest implements Serializable {
-    private String escopo;
+    private String scope;
     private String nuit;
-    private String organico;
-    private String contacto;
+    private String organic;
+    private String contact;
 
     public ScadTokenRequest() {
     }
 
-    public String getEscopo() {
-        return escopo;
+    public String getScope() {
+        return scope;
     }
 
-    public void setEscopo(String escopo) {
-        this.escopo = escopo;
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 
     public String getNuit() {
@@ -27,19 +27,19 @@ public class ScadTokenRequest implements Serializable {
         this.nuit = nuit;
     }
 
-    public String getOrganico() {
-        return organico;
+    public String getOrganic() {
+        return organic;
     }
 
-    public void setOrganico(String organico) {
-        this.organico = organico;
+    public void setOrganic(String organic) {
+        this.organic = organic;
     }
 
-    public String getContacto() {
-        return contacto;
+    public String getContact() {
+        return contact;
     }
 
-    public void setContacto(String contacto) {
-        this.contacto = contacto;
+    public void setContact(String contact) {
+        this.contact = contact;
     }
 }

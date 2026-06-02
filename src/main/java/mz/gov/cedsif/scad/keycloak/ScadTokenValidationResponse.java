@@ -4,32 +4,32 @@ import java.io.Serializable;
 
 public class ScadTokenValidationResponse implements Serializable {
     private String token;
-    private boolean valido;
+    private boolean valid;
     private String nuit;
-    private String contacto;
-    private String organico;
-    private String escopo;
-    private String banco;
+    private String contact;
+    private String organic;
+    private String scope;
+    private String bank;
     private String clientId;
-    private String timestampGeracao;
-    private String mensagem;
+    private String generationTimestamp;
+    private String message;
 
     public ScadTokenValidationResponse() {
     }
 
-    public ScadTokenValidationResponse(String token, boolean valido, String nuit, String contacto, 
-                                        String organico, String escopo, String banco, String clientId, 
-                                        String timestampGeracao, String mensagem) {
+    public ScadTokenValidationResponse(String token, boolean valid, String nuit, String contact, 
+                                        String organic, String scope, String bank, String clientId, 
+                                        String generationTimestamp, String message) {
         this.token = token;
-        this.valido = valido;
+        this.valid = valid;
         this.nuit = nuit;
-        this.contacto = contacto;
-        this.organico = organico;
-        this.escopo = escopo;
-        this.banco = banco;
+        this.contact = contact;
+        this.organic = organic;
+        this.scope = scope;
+        this.bank = bank;
         this.clientId = clientId;
-        this.timestampGeracao = timestampGeracao;
-        this.mensagem = mensagem;
+        this.generationTimestamp = generationTimestamp;
+        this.message = message;
     }
 
     public String getToken() {
@@ -40,12 +40,12 @@ public class ScadTokenValidationResponse implements Serializable {
         this.token = token;
     }
 
-    public boolean isValido() {
-        return valido;
+    public boolean isValid() {
+        return valid;
     }
 
-    public void setValido(boolean valido) {
-        this.valido = valido;
+    public void setValid(boolean valid) {
+        this.valid = valid;
     }
 
     public String getNuit() {
@@ -56,36 +56,36 @@ public class ScadTokenValidationResponse implements Serializable {
         this.nuit = nuit;
     }
 
-    public String getContacto() {
-        return contacto;
+    public String getContact() {
+        return contact;
     }
 
-    public void setContacto(String contacto) {
-        this.contacto = contacto;
+    public void setContact(String contact) {
+        this.contact = contact;
     }
 
-    public String getOrganico() {
-        return organico;
+    public String getOrganic() {
+        return organic;
     }
 
-    public void setOrganico(String organico) {
-        this.organico = organico;
+    public void setOrganic(String organic) {
+        this.organic = organic;
     }
 
-    public String getEscopo() {
-        return escopo;
+    public String getScope() {
+        return scope;
     }
 
-    public void setEscopo(String escopo) {
-        this.escopo = escopo;
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 
-    public String getBanco() {
-        return banco;
+    public String getBank() {
+        return bank;
     }
 
-    public void setBanco(String banco) {
-        this.banco = banco;
+    public void setBank(String bank) {
+        this.bank = bank;
     }
 
     public String getClientId() {
@@ -96,19 +96,19 @@ public class ScadTokenValidationResponse implements Serializable {
         this.clientId = clientId;
     }
 
-    public String getTimestampGeracao() {
-        return timestampGeracao;
+    public String getGenerationTimestamp() {
+        return generationTimestamp;
     }
 
-    public void setTimestampGeracao(String timestampGeracao) {
-        this.timestampGeracao = timestampGeracao;
+    public void setGenerationTimestamp(String generationTimestamp) {
+        this.generationTimestamp = generationTimestamp;
     }
 
-    public String getMensagem() {
-        return mensagem;
+    public String getMessage() {
+        return message;
     }
 
-    public void setMensagem(String mensagem) {
-        this.mensagem = mensagem;
+    public void setMessage(String message) {
+        this.message = message;
     }
 }
