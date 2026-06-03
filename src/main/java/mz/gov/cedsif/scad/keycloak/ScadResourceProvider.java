@@ -40,6 +40,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response generateToken(ScadTokenRequest request) {
+        logger.info(String.format("Token generation request received: [Scope: %s, NUIT: %s, OrganicCode: %s, Contact: %s]", 
+                request.getScope(), request.getNuit(), request.getOrganicCode(), request.getContact()));
+
         ClientModel client = session.getContext().getClient();
         if (client == null) {
             logger.warning("Token generation attempt by unauthenticated client.");
