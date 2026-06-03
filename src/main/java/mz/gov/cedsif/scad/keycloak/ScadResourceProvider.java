@@ -123,8 +123,8 @@ public class ScadResourceProvider implements RealmResourceProvider {
             tokenDetails.put("clientId", clientId);
             tokenDetails.put("timestamp", String.valueOf(System.currentTimeMillis()));
 
-            // Token válido por 10 minutos (600 segundos)
-            long lifespanSeconds = 600;
+            // Token válido por 15 minutos (900 segundos)
+            long lifespanSeconds = 900;
             String storeKey = "scad-token:" + finalToken;
             singleUseObjects.put(storeKey, lifespanSeconds, tokenDetails);
             
@@ -220,7 +220,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
             return;
         }
 
-        String mensagem = "O seu token SCAD e " + token + ". Valido por 10 min.";
+        String mensagem = "O seu token SCAD e " + token + ". Valido por 15 min.";
         
         try {
             String jsonPayload = String.format("{\"to_number\":\"%s\", \"content\":\"%s\"}", telefone, mensagem);
