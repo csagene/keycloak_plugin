@@ -116,14 +116,16 @@ public class ScadResourceProvider implements RealmResourceProvider {
             org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
             
             String nuitVal = request.getNuit() != null ? request.getNuit().trim() : "";
-            if (!nuitVal.isEmpty()) {
-                String nuitKey = "scad-nuit-token:" + nuitVal;
-                java.util.Map<String, String> oldNuitDetails = singleUseObjects.get(nuitKey);
-                if (oldNuitDetails != null) {
-                    String oldToken = oldNuitDetails.get("token");
+            String organicVal = request.getOrganicCode() != null ? request.getOrganicCode().trim() : "";
+            
+            if (!nuitVal.isEmpty() && !organicVal.isEmpty()) {
+                String nuitOrganicKey = "scad-nuit-organic-token:" + nuitVal + ":" + organicVal;
+                java.util.Map<String, String> oldDetails = singleUseObjects.get(nuitOrganicKey);
+                if (oldDetails != null) {
+                    String oldToken = oldDetails.get("token");
                     if (oldToken != null) {
                         singleUseObjects.remove("scad-token:" + oldToken);
-                        logger.info("Revoked previous token for NUIT " + nuitVal + ": " + oldToken);
+                        logger.info("Revoked previous token for NUIT " + nuitVal + " and organicCode " + organicVal + ": " + oldToken);
                     }
                 }
             }
@@ -131,7 +133,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
             java.util.Map<String, String> tokenDetails = new java.util.HashMap<>();
             tokenDetails.put("nuit", nuitVal);
             tokenDetails.put("contact", request.getContact() != null ? request.getContact() : "");
-            tokenDetails.put("organicCode", request.getOrganicCode() != null ? request.getOrganicCode() : "");
+            tokenDetails.put("organicCode", organicVal);
             tokenDetails.put("scope", request.getScope() != null ? request.getScope() : "");
             tokenDetails.put("bank", bankName);
             tokenDetails.put("clientId", clientId);
@@ -143,13 +145,13 @@ public class ScadResourceProvider implements RealmResourceProvider {
             singleUseObjects.put(storeKey, lifespanSeconds, tokenDetails);
             logger.info("Token persisted in SingleUseObjectProvider (Single Use) with key: " + storeKey);
 
-            if (!nuitVal.isEmpty()) {
-                String nuitKey = "scad-nuit-token:" + nuitVal;
-                java.util.Map<String, String> nuitMapping = new java.util.HashMap<>();
-                nuitMapping.put("token", finalToken);
-                nuitMapping.put("clientId", clientId);
-                singleUseObjects.put(nuitKey, lifespanSeconds, nuitMapping);
-                logger.info("NUIT to Token mapping persisted with key: " + nuitKey);
+            if (!nuitVal.isEmpty() && !organicVal.isEmpty()) {
+                String nuitOrganicKey = "scad-nuit-organic-token:" + nuitVal + ":" + organicVal;
+                java.util.Map<String, String> mapping = new java.util.HashMap<>();
+                mapping.put("token", finalToken);
+                mapping.put("clientId", clientId);
+                singleUseObjects.put(nuitOrganicKey, lifespanSeconds, mapping);
+                logger.info("NUIT and organicCode to Token mapping persisted with key: " + nuitOrganicKey);
             }
         } catch (Exception e) {
             logger.log(java.util.logging.Level.SEVERE, "Failed to persist token in SingleUseObjectProvider", e);
@@ -208,10 +210,12 @@ public class ScadResourceProvider implements RealmResourceProvider {
 
             logger.info("Token successfully validated and consumed (Single-Use): " + token);
 
-            // Cleanup the NUIT mapping
+            // Cleanup the NUIT and organicCode mapping
             String nuit = tokenDetails.get("nuit");
-            if (nuit != null && !nuit.trim().isEmpty()) {
-                singleUseObjects.remove("scad-nuit-token:" + nuit.trim());
+            String organicCode = tokenDetails.get("organicCode");
+            if (nuit != null && !nuit.trim().isEmpty() && organicCode != null && !organicCode.trim().isEmpty()) {
+                String nuitOrganicKey = "scad-nuit-organic-token:" + nuit.trim() + ":" + organicCode.trim();
+                singleUseObjects.remove(nuitOrganicKey);
             }
 
             ScadTokenValidationResponse response = new ScadTokenValidationResponse(
@@ -243,15 +247,17 @@ public class ScadResourceProvider implements RealmResourceProvider {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response resendToken(ScadTokenResendRequest request) {
-        if (request == null || request.getNuit() == null || request.getNuit().trim().isEmpty()) {
+        if (request == null || request.getNuit() == null || request.getNuit().trim().isEmpty()
+                || request.getOrganicCode() == null || request.getOrganicCode().trim().isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("{\"error\": \"NUIT not provided\"}")
+                    .entity("{\"error\": \"NUIT and organicCode must be provided\"}")
                     .type(MediaType.APPLICATION_JSON)
                     .build();
         }
 
         String nuit = request.getNuit().trim();
-        logger.info(String.format("Resend token request received for NUIT: %s", nuit));
+        String organicCode = request.getOrganicCode().trim();
+        logger.info(String.format("Resend token request received for NUIT: %s and organicCode: %s", nuit, organicCode));
 
         ClientModel client = session.getContext().getClient();
         if (client == null) {
@@ -262,23 +268,23 @@ public class ScadResourceProvider implements RealmResourceProvider {
                     .build();
         }
 
-        String nuitKey = "scad-nuit-token:" + nuit;
+        String nuitOrganicKey = "scad-nuit-organic-token:" + nuit + ":" + organicCode;
         try {
             org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
-            java.util.Map<String, String> nuitDetails = singleUseObjects.get(nuitKey);
+            java.util.Map<String, String> mappingDetails = singleUseObjects.get(nuitOrganicKey);
 
-            if (nuitDetails == null || nuitDetails.isEmpty()) {
-                logger.warning("Resend attempt failed. No active token found for NUIT: " + nuit);
+            if (mappingDetails == null || mappingDetails.isEmpty()) {
+                logger.warning("Resend attempt failed. No active token found for NUIT: " + nuit + " and organicCode: " + organicCode);
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("{\"error\": \"No active token found for the provided NUIT\"}")
+                        .entity("{\"error\": \"No active token found for the provided NUIT and organicCode\"}")
                         .type(MediaType.APPLICATION_JSON)
                         .build();
             }
 
-            String token = nuitDetails.get("token");
+            String token = mappingDetails.get("token");
             if (token == null || token.trim().isEmpty()) {
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("{\"error\": \"No active token found for the provided NUIT\"}")
+                        .entity("{\"error\": \"No active token found for the provided NUIT and organicCode\"}")
                         .type(MediaType.APPLICATION_JSON)
                         .build();
             }
@@ -287,11 +293,11 @@ public class ScadResourceProvider implements RealmResourceProvider {
             java.util.Map<String, String> tokenDetails = singleUseObjects.get(storeKey);
 
             if (tokenDetails == null || tokenDetails.isEmpty()) {
-                logger.warning("Resend attempt failed. Token mapped to NUIT is invalid or expired in cache: " + token);
+                logger.warning("Resend attempt failed. Token mapped to NUIT/organicCode is invalid or expired in cache: " + token);
                 // Clean up stale mapping
-                singleUseObjects.remove(nuitKey);
+                singleUseObjects.remove(nuitOrganicKey);
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("{\"error\": \"No active token found for the provided NUIT\"}")
+                        .entity("{\"error\": \"No active token found for the provided NUIT and organicCode\"}")
                         .type(MediaType.APPLICATION_JSON)
                         .build();
             }
