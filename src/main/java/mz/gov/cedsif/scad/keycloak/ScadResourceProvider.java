@@ -114,8 +114,22 @@ public class ScadResourceProvider implements RealmResourceProvider {
         // Guardar token no SingleUseObjectProvider (Keycloak Cache de Uso Único)
         try {
             org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
+            
+            String nuitVal = request.getNuit() != null ? request.getNuit().trim() : "";
+            if (!nuitVal.isEmpty()) {
+                String nuitKey = "scad-nuit-token:" + nuitVal;
+                java.util.Map<String, String> oldNuitDetails = singleUseObjects.get(nuitKey);
+                if (oldNuitDetails != null) {
+                    String oldToken = oldNuitDetails.get("token");
+                    if (oldToken != null) {
+                        singleUseObjects.remove("scad-token:" + oldToken);
+                        logger.info("Revoked previous token for NUIT " + nuitVal + ": " + oldToken);
+                    }
+                }
+            }
+
             java.util.Map<String, String> tokenDetails = new java.util.HashMap<>();
-            tokenDetails.put("nuit", request.getNuit() != null ? request.getNuit() : "");
+            tokenDetails.put("nuit", nuitVal);
             tokenDetails.put("contact", request.getContact() != null ? request.getContact() : "");
             tokenDetails.put("organicCode", request.getOrganicCode() != null ? request.getOrganicCode() : "");
             tokenDetails.put("scope", request.getScope() != null ? request.getScope() : "");
@@ -127,8 +141,16 @@ public class ScadResourceProvider implements RealmResourceProvider {
             long lifespanSeconds = 900;
             String storeKey = "scad-token:" + finalToken;
             singleUseObjects.put(storeKey, lifespanSeconds, tokenDetails);
-            
             logger.info("Token persisted in SingleUseObjectProvider (Single Use) with key: " + storeKey);
+
+            if (!nuitVal.isEmpty()) {
+                String nuitKey = "scad-nuit-token:" + nuitVal;
+                java.util.Map<String, String> nuitMapping = new java.util.HashMap<>();
+                nuitMapping.put("token", finalToken);
+                nuitMapping.put("clientId", clientId);
+                singleUseObjects.put(nuitKey, lifespanSeconds, nuitMapping);
+                logger.info("NUIT to Token mapping persisted with key: " + nuitKey);
+            }
         } catch (Exception e) {
             logger.log(java.util.logging.Level.SEVERE, "Failed to persist token in SingleUseObjectProvider", e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
@@ -186,6 +208,12 @@ public class ScadResourceProvider implements RealmResourceProvider {
 
             logger.info("Token successfully validated and consumed (Single-Use): " + token);
 
+            // Cleanup the NUIT mapping
+            String nuit = tokenDetails.get("nuit");
+            if (nuit != null && !nuit.trim().isEmpty()) {
+                singleUseObjects.remove("scad-nuit-token:" + nuit.trim());
+            }
+
             ScadTokenValidationResponse response = new ScadTokenValidationResponse(
                     token,
                     true,
@@ -215,15 +243,15 @@ public class ScadResourceProvider implements RealmResourceProvider {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response resendToken(ScadTokenResendRequest request) {
-        if (request == null || request.getToken() == null || request.getToken().trim().isEmpty()) {
+        if (request == null || request.getNuit() == null || request.getNuit().trim().isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("{\"error\": \"Token not provided\"}")
+                    .entity("{\"error\": \"NUIT not provided\"}")
                     .type(MediaType.APPLICATION_JSON)
                     .build();
         }
 
-        String token = request.getToken().trim();
-        logger.info(String.format("Resend token request received for token: %s", token));
+        String nuit = request.getNuit().trim();
+        logger.info(String.format("Resend token request received for NUIT: %s", nuit));
 
         ClientModel client = session.getContext().getClient();
         if (client == null) {
@@ -234,15 +262,36 @@ public class ScadResourceProvider implements RealmResourceProvider {
                     .build();
         }
 
-        String storeKey = "scad-token:" + token;
+        String nuitKey = "scad-nuit-token:" + nuit;
         try {
             org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
+            java.util.Map<String, String> nuitDetails = singleUseObjects.get(nuitKey);
+
+            if (nuitDetails == null || nuitDetails.isEmpty()) {
+                logger.warning("Resend attempt failed. No active token found for NUIT: " + nuit);
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("{\"error\": \"No active token found for the provided NUIT\"}")
+                        .type(MediaType.APPLICATION_JSON)
+                        .build();
+            }
+
+            String token = nuitDetails.get("token");
+            if (token == null || token.trim().isEmpty()) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("{\"error\": \"No active token found for the provided NUIT\"}")
+                        .type(MediaType.APPLICATION_JSON)
+                        .build();
+            }
+
+            String storeKey = "scad-token:" + token;
             java.util.Map<String, String> tokenDetails = singleUseObjects.get(storeKey);
 
             if (tokenDetails == null || tokenDetails.isEmpty()) {
-                logger.warning("Resend attempt failed. Token is invalid, expired, or already consumed: " + token);
+                logger.warning("Resend attempt failed. Token mapped to NUIT is invalid or expired in cache: " + token);
+                // Clean up stale mapping
+                singleUseObjects.remove(nuitKey);
                 return Response.status(Response.Status.NOT_FOUND)
-                        .entity("{\"error\": \"Token invalid, expired, or already consumed\"}")
+                        .entity("{\"error\": \"No active token found for the provided NUIT\"}")
                         .type(MediaType.APPLICATION_JSON)
                         .build();
             }
@@ -260,7 +309,6 @@ public class ScadResourceProvider implements RealmResourceProvider {
             }
 
             String contact = tokenDetails.get("contact");
-            String nuit = tokenDetails.get("nuit");
 
             String maskedContact = contact;
             boolean isEmail = false;
