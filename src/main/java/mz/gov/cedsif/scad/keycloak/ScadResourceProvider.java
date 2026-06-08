@@ -103,9 +103,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
         }
 
         if (isEmail) {
-            enviarEmail(contact, finalToken, 15);
+            enviarEmail(contact, finalToken, 15, false);
         } else {
-            enviarSMSViaTelerivet(contact, finalToken, 15);
+            enviarSMSViaTelerivet(contact, finalToken, 15, false);
         }
 
         String deliveryMethod = isEmail ? "email" : "SMS";
@@ -346,9 +346,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
             }
 
             if (isEmail) {
-                enviarEmail(contact, token, remainingMinutes);
+                enviarEmail(contact, token, remainingMinutes, true);
             } else {
-                enviarSMSViaTelerivet(contact, token, remainingMinutes);
+                enviarSMSViaTelerivet(contact, token, remainingMinutes, true);
             }
 
             String deliveryMethod = isEmail ? "email" : "SMS";
@@ -375,17 +375,18 @@ public class ScadResourceProvider implements RealmResourceProvider {
     }
 
 
-    private void enviarSMSViaTelerivet(String telefone, String token, long remainingMinutes) {
+    private void enviarSMSViaTelerivet(String telefone, String token, long remainingMinutes, boolean isResend) {
         String apiKey = TELERIVET_API_KEY;
         String projectId = TELERIVET_PROJECT_ID;
 
+        String prefix = isResend ? "Token reenviado. " : "";
+        String mensagem = prefix + "O seu token SCAD é " + token + ". Válido por " + remainingMinutes + " min.";
+
         if ("SUA_API_KEY_AQUI".equals(apiKey) || "SEU_PROJECT_ID_AQUI".equals(projectId)) {
-            logger.warning("TELERIVET: Credenciais nao configuradas. Simulando envio de SMS...");
-            logger.info(String.format("SIMULACAO SMS -> Enviado para %s: 'O seu token SCAD e %s. Valido por %d min.'", telefone, token, remainingMinutes));
+            logger.warning("TELERIVET: Credenciais não configuradas. Simulando envio de SMS...");
+            logger.info(String.format("SIMULACAO SMS -> Enviado para %s: '%s'", telefone, mensagem));
             return;
         }
-
-        String mensagem = "O seu token SCAD e " + token + ". Valido por " + remainingMinutes + " min.";
         
         try {
             String jsonPayload = String.format("{\"to_number\":\"%s\", \"content\":\"%s\"}", telefone, mensagem);
@@ -409,7 +410,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
                         }
                     })
                     .exceptionally(ex -> {
-                        logger.log(java.util.logging.Level.SEVERE, "TELERIVET: Erro na conexao com a API", ex);
+                        logger.log(java.util.logging.Level.SEVERE, "TELERIVET: Erro na conexão com a API", ex);
                         return null;
                     });
 
@@ -418,28 +419,32 @@ public class ScadResourceProvider implements RealmResourceProvider {
         }
     }
 
-    private void enviarEmail(String email, String token, long remainingMinutes) {
+    private void enviarEmail(String email, String token, long remainingMinutes, boolean isResend) {
         try {
             org.keycloak.email.EmailSenderProvider emailSender = session.getProvider(org.keycloak.email.EmailSenderProvider.class);
             java.util.Map<String, String> config = session.getContext().getRealm().getSmtpConfig();
 
+            String prefix = isResend ? "Token reenviado. " : "";
+            String subject = isResend ? "Serviço SCAD - Reenvio de Token de Autorização" : "Serviço SCAD - Token de Autorização";
+            String textBody = prefix + "O seu token SCAD é: " + token + ". Válido por: " + remainingMinutes + " min.";
+
             // Se o SMTP não estiver configurado no Realm do Keycloak, simulamos o envio no log
             if (config == null || config.isEmpty() || !config.containsKey("host")) {
-                logger.warning("SMTP nao configurado no Keycloak Realm. Simulando envio de Email...");
-                logger.info(String.format("SIMULACAO EMAIL -> Enviado para %s: 'O seu token SCAD e %s. Valido por %d min.'", email, token, remainingMinutes));
+                logger.warning("SMTP não configurado no Keycloak Realm. Simulando envio de Email...");
+                logger.info(String.format("SIMULACAO EMAIL -> Enviado para %s | Assunto: '%s' | Corpo: '%s'", email, subject, textBody));
                 return;
             }
 
             // Executar envio de forma assíncrona para não bloquear a resposta REST
+            final String finalSubject = subject;
+            final String finalBody = textBody;
             CompletableFuture.runAsync(() -> {
                 try {
-                    String subject = "Servico SCAD - Token de Autorizacao";
-                    String textBody = "O seu token SCAD e: " + token + ". Valido por: " + remainingMinutes + " min.";
                     emailSender.send(config, 
                                      email, 
-                                     subject, 
-                                     textBody, 
-                                     textBody);
+                                     finalSubject, 
+                                     finalBody, 
+                                     finalBody);
                     logger.info("EMAIL: Token enviado com sucesso via SMTP do Keycloak para " + email);
                 } catch (Exception e) {
                     logger.log(java.util.logging.Level.SEVERE, "EMAIL: Falha ao enviar email via SMTP", e);
@@ -447,7 +452,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
             });
 
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.SEVERE, "EMAIL: Falha ao inicializar servico de email do Keycloak", e);
+            logger.log(java.util.logging.Level.SEVERE, "EMAIL: Falha ao inicializar serviço de email do Keycloak", e);
         }
     }
 
