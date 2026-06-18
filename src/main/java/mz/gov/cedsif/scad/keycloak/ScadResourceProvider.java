@@ -26,6 +26,14 @@ public class ScadResourceProvider implements RealmResourceProvider {
     private static final String TELERIVET_API_KEY = System.getenv().getOrDefault("TELERIVET_API_KEY", "hBPfi_Cf9aIDgiZrS8lIIEM78S2PaFNiS4XT");
     private static final String TELERIVET_PROJECT_ID = System.getenv().getOrDefault("TELERIVET_PROJECT_ID", "PJ807abc14a9f01587");
 
+    private static final String SMTP_HOST = System.getenv().getOrDefault("SCAD_SMTP_HOST", "172.17.1.23");
+    private static final String SMTP_PORT = System.getenv().getOrDefault("SCAD_SMTP_PORT", "587");
+    private static final String SMTP_USER = System.getenv().getOrDefault("SCAD_SMTP_USER", "scad.teste@rsig.gov.mz");
+    private static final String SMTP_PASSWORD = System.getenv().getOrDefault("SCAD_SMTP_PASSWORD", "Passw0rd");
+    private static final String SMTP_STARTTLS = System.getenv().getOrDefault("SCAD_SMTP_STARTTLS", "true");
+    private static final String SMTP_AUTH = System.getenv().getOrDefault("SCAD_SMTP_AUTH", "true");
+    private static final String SMTP_SSL_CHECK_SERVER_IDENTITY = System.getenv().getOrDefault("SCAD_SMTP_SSL_CHECK_SERVER_IDENTITY", "false");
+
     public ScadResourceProvider(KeycloakSession session) {
         this.session = session;
     }
@@ -426,40 +434,42 @@ public class ScadResourceProvider implements RealmResourceProvider {
     }
 
     private void enviarEmail(String email, String token, long remainingMinutes, boolean isResend) {
-        try {
-            org.keycloak.email.EmailSenderProvider emailSender = session.getProvider(org.keycloak.email.EmailSenderProvider.class);
-            java.util.Map<String, String> config = session.getContext().getRealm().getSmtpConfig();
+        String prefix = isResend ? "Token reenviado. " : "";
+        String subject = isResend ? "Serviço SCAD - Reenvio de Token de Autorização" : "Serviço SCAD - Token de Autorização";
+        String textBody = prefix + "O seu token SCAD é: " + token + ". Válido por: " + remainingMinutes + " min.";
 
-            String prefix = isResend ? "Token reenviado. " : "";
-            String subject = isResend ? "Serviço SCAD - Reenvio de Token de Autorização" : "Serviço SCAD - Token de Autorização";
-            String textBody = prefix + "O seu token SCAD é: " + token + ". Válido por: " + remainingMinutes + " min.";
+        logger.info(String.format("Iniciando envio de email para %s (Assunto: %s)", email, subject));
 
-            // Se o SMTP não estiver configurado no Realm do Keycloak, simulamos o envio no log
-            if (config == null || config.isEmpty() || !config.containsKey("host")) {
-                logger.warning("SMTP não configurado no Keycloak Realm. Simulando envio de Email...");
-                logger.info(String.format("SIMULACAO EMAIL -> Enviado para %s | Assunto: '%s' | Corpo: '%s'", email, subject, textBody));
-                return;
+        CompletableFuture.runAsync(() -> {
+            try {
+                java.util.Properties prop = new java.util.Properties();
+                prop.put("mail.smtp.host", SMTP_HOST);
+                prop.put("mail.smtp.port", SMTP_PORT);
+                prop.put("mail.smtp.auth", SMTP_AUTH);
+                prop.put("mail.smtp.starttls.enable", SMTP_STARTTLS);
+                prop.put("mail.smtp.ssl.trust", "*");
+                prop.put("mail.smtp.ssl.protocols", "TLSv1.2 TLSv1.3");
+                prop.put("mail.smtp.ssl.checkserveridentity", SMTP_SSL_CHECK_SERVER_IDENTITY);
+
+                jakarta.mail.Session mailSession = jakarta.mail.Session.getInstance(prop, new jakarta.mail.Authenticator() {
+                    @Override
+                    protected jakarta.mail.PasswordAuthentication getPasswordAuthentication() {
+                        return new jakarta.mail.PasswordAuthentication(SMTP_USER, SMTP_PASSWORD);
+                    }
+                });
+
+                jakarta.mail.internet.MimeMessage message = new jakarta.mail.internet.MimeMessage(mailSession);
+                message.setFrom(new jakarta.mail.internet.InternetAddress(SMTP_USER));
+                message.setRecipients(jakarta.mail.Message.RecipientType.TO, jakarta.mail.internet.InternetAddress.parse(email));
+                message.setSubject(subject, "UTF-8");
+                message.setText(textBody, "UTF-8");
+
+                jakarta.mail.Transport.send(message);
+                logger.info("EMAIL: Token enviado com sucesso via SMTP direto para " + email);
+            } catch (Exception e) {
+                logger.log(java.util.logging.Level.SEVERE, "EMAIL: Falha ao enviar email via SMTP direto", e);
             }
-
-            // Executar envio de forma assíncrona para não bloquear a resposta REST
-            final String finalSubject = subject;
-            final String finalBody = textBody;
-            CompletableFuture.runAsync(() -> {
-                try {
-                    emailSender.send(config, 
-                                     email, 
-                                     finalSubject, 
-                                     finalBody, 
-                                     finalBody);
-                    logger.info("EMAIL: Token enviado com sucesso via SMTP do Keycloak para " + email);
-                } catch (Exception e) {
-                    logger.log(java.util.logging.Level.SEVERE, "EMAIL: Falha ao enviar email via SMTP", e);
-                }
-            });
-
-        } catch (Exception e) {
-            logger.log(java.util.logging.Level.SEVERE, "EMAIL: Falha ao inicializar serviço de email do Keycloak", e);
-        }
+        });
     }
 
     @Override
