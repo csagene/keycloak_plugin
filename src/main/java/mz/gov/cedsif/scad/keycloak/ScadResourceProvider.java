@@ -23,8 +23,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
     private static final Logger logger = Logger.getLogger(ScadResourceProvider.class.getName());
     private final KeycloakSession session;
 
-    private static final String TELERIVET_API_KEY = System.getenv().getOrDefault("TELERIVET_API_KEY", "hBPfi_Cf9aIDgiZrS8lIIEM78S2PaFNiS4XT");
-    private static final String TELERIVET_PROJECT_ID = System.getenv().getOrDefault("TELERIVET_PROJECT_ID", "PJ807abc14a9f01587");
+    private static final String TWILIO_ACCOUNT_SID = System.getenv().getOrDefault("TWILIO_ACCOUNT_SID", "");
+    private static final String TWILIO_AUTH_TOKEN = System.getenv().getOrDefault("TWILIO_AUTH_TOKEN", "");
+    private static final String TWILIO_MSID = System.getenv().getOrDefault("TWILIO_MSID", "");
 
     private static final String SMTP_HOST = System.getenv().getOrDefault("SCAD_SMTP_HOST", "172.17.1.23");
     private static final String SMTP_PORT = System.getenv().getOrDefault("SCAD_SMTP_PORT", "587");
@@ -113,7 +114,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
         if (isEmail) {
             enviarEmail(contact, finalToken, 15, false);
         } else {
-            enviarSMSViaTelerivet(contact, finalToken, 15, false);
+            enviarSMSViaTwilio(contact, finalToken, 15, false);
         }
 
         String deliveryMethod = isEmail ? "email" : "SMS";
@@ -362,7 +363,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
             if (isEmail) {
                 enviarEmail(contact, token, remainingMinutes, true);
             } else {
-                enviarSMSViaTelerivet(contact, token, remainingMinutes, true);
+                enviarSMSViaTwilio(contact, token, remainingMinutes, true);
             }
 
             String deliveryMethod = isEmail ? "email" : "SMS";
@@ -389,47 +390,51 @@ public class ScadResourceProvider implements RealmResourceProvider {
     }
 
 
-    private void enviarSMSViaTelerivet(String telefone, String token, long remainingMinutes, boolean isResend) {
-        String apiKey = TELERIVET_API_KEY;
-        String projectId = TELERIVET_PROJECT_ID;
-
+    private void enviarSMSViaTwilio(String telefone, String token, long remainingMinutes, boolean isResend) {
         String prefix = isResend ? "Token reenviado. " : "";
         String mensagem = prefix + "O seu token SCAD é " + token + ". Válido por " + remainingMinutes + " min.";
-
-        if ("SUA_API_KEY_AQUI".equals(apiKey) || "SEU_PROJECT_ID_AQUI".equals(projectId)) {
-            logger.warning("TELERIVET: Credenciais não configuradas. Simulando envio de SMS...");
-            logger.info(String.format("SIMULACAO SMS -> Enviado para %s: '%s'", telefone, mensagem));
-            return;
+        
+        // Ensure the phone number is in E.164 format (starts with '+' and country code)
+        String formattedTelefone = telefone != null ? telefone.trim() : "";
+        if (formattedTelefone.length() == 9 && formattedTelefone.matches("^[8|2]\\d{8}$")) {
+            formattedTelefone = "+258" + formattedTelefone;
+        } else if (!formattedTelefone.startsWith("+")) {
+            formattedTelefone = "+" + formattedTelefone;
         }
         
+        final String finalTelefone = formattedTelefone;
+
         try {
-            String jsonPayload = String.format("{\"to_number\":\"%s\", \"content\":\"%s\"}", telefone, mensagem);
-            String rawAuth = apiKey + ":";
+            String urlParameters = "To=" + java.net.URLEncoder.encode(finalTelefone, StandardCharsets.UTF_8.name())
+                    + "&MessagingServiceSid=" + java.net.URLEncoder.encode(TWILIO_MSID, StandardCharsets.UTF_8.name())
+                    + "&Body=" + java.net.URLEncoder.encode(mensagem, StandardCharsets.UTF_8.name());
+
+            String rawAuth = TWILIO_ACCOUNT_SID + ":" + TWILIO_AUTH_TOKEN;
             String authHeader = "Basic " + Base64.getEncoder().encodeToString(rawAuth.getBytes(StandardCharsets.UTF_8));
 
             HttpClient client = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.telerivet.com/v1/projects/" + projectId + "/messages/send"))
+                    .uri(URI.create("https://api.twilio.com/2010-04-01/Accounts/" + TWILIO_ACCOUNT_SID + "/Messages.json"))
                     .header("Authorization", authHeader)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(urlParameters))
                     .build();
 
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
                         if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                            logger.info("TELERIVET: SMS enviado com sucesso para " + telefone + " | Status: " + response.statusCode());
+                            logger.info("TWILIO: SMS enviado com sucesso para " + finalTelefone + " | Status: " + response.statusCode());
                         } else {
-                            logger.severe("TELERIVET: Falha ao enviar SMS. Status: " + response.statusCode() + " | Resposta: " + response.body());
+                            logger.severe("TWILIO: Falha ao enviar SMS para " + finalTelefone + ". Status: " + response.statusCode() + " | Resposta: " + response.body());
                         }
                     })
                     .exceptionally(ex -> {
-                        logger.log(java.util.logging.Level.SEVERE, "TELERIVET: Erro na conexão com a API", ex);
+                        logger.log(java.util.logging.Level.SEVERE, "TWILIO: Erro na conexão com a API", ex);
                         return null;
                     });
 
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.SEVERE, "TELERIVET: Falha ao construir chamada de SMS", e);
+            logger.log(java.util.logging.Level.SEVERE, "TWILIO: Falha ao construir chamada de SMS", e);
         }
     }
 
