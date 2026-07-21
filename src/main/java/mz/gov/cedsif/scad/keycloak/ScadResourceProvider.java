@@ -392,7 +392,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
 
     private void enviarSMSViaTwilio(String telefone, String token, long remainingMinutes, boolean isResend) {
         String prefix = isResend ? "Token reenviado. " : "";
-        String mensagem = prefix + "O seu token SCAD é " + token + ". Válido por " + remainingMinutes + " min.";
+        String mensagem = prefix + "O seu código de validação para confirmar a solicitação de crédito é: " + token + ". Este código é válido por " + remainingMinutes + " minutos. Não o partilhe com ninguém. Se não efetuou esta solicitação, ignore esta mensagem.";
         
         // Ensure the phone number is in E.164 format (starts with '+' and country code)
         String formattedTelefone = telefone != null ? telefone.trim() : "";
@@ -441,7 +441,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
     private void enviarEmail(String email, String token, long remainingMinutes, boolean isResend) {
         String prefix = isResend ? "Token reenviado. " : "";
         String subject = isResend ? "Serviço SCAD - Reenvio de Token de Autorização" : "Serviço SCAD - Token de Autorização";
-        String textBody = prefix + "O seu token SCAD é: " + token + ". Válido por: " + remainingMinutes + " min.";
+        String textBody = prefix + "O seu código de validação para confirmar a solicitação de crédito é: " + token + ". Este código é válido por " + remainingMinutes + " minutos. Não o partilhe com ninguém. Se não efetuou esta solicitação, ignore esta mensagem.";
 
         logger.info(String.format("Iniciando envio de email para %s (Assunto: %s)", email, subject));
 
