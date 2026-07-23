@@ -407,6 +407,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
         try {
             String urlParameters = "To=" + java.net.URLEncoder.encode(finalTelefone, StandardCharsets.UTF_8.name())
                     + "&MessagingServiceSid=" + java.net.URLEncoder.encode(TWILIO_MSID, StandardCharsets.UTF_8.name())
+                    + "&RiskCheck=disable"
                     + "&Body=" + java.net.URLEncoder.encode(mensagem, StandardCharsets.UTF_8.name());
 
             String rawAuth = TWILIO_ACCOUNT_SID + ":" + TWILIO_AUTH_TOKEN;

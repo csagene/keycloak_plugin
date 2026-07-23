@@ -9,3 +9,4 @@ target/
 build/
 bin/
 run-keycloak.sh
+/.metadata/

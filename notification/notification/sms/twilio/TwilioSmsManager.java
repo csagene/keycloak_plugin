@@ -150,7 +150,9 @@ public class TwilioSmsManager {
 	 * @throws TwilioException If sending fails
 	 */
 	private void sendMessage(String receiver, String message) {
-		Message.creator(new PhoneNumber(receiver), msid, message).create();
+		Message.creator(new PhoneNumber(receiver), msid, message)
+				.setRiskCheck("disable")
+				.create();
 
 		LOGGER.debug("Message sent via Twilio using msid: {} to {}", msid, receiver);
 	}
