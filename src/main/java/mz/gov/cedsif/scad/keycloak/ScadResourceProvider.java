@@ -23,17 +23,98 @@ public class ScadResourceProvider implements RealmResourceProvider {
     private static final Logger logger = Logger.getLogger(ScadResourceProvider.class.getName());
     private final KeycloakSession session;
 
-    private static final String TWILIO_ACCOUNT_SID = System.getenv().getOrDefault("TWILIO_ACCOUNT_SID", "");
-    private static final String TWILIO_AUTH_TOKEN = System.getenv().getOrDefault("TWILIO_AUTH_TOKEN", "");
-    private static final String TWILIO_MSID = System.getenv().getOrDefault("TWILIO_MSID", "");
+    private static String SMS_PROVIDER = System.getenv().getOrDefault("SCAD_SMS_PROVIDER", "twilio");
+    private static int SMS_MAX_RETRIES = 3;
 
-    private static final String SMTP_HOST = System.getenv().getOrDefault("SCAD_SMTP_HOST", "172.17.1.23");
-    private static final String SMTP_PORT = System.getenv().getOrDefault("SCAD_SMTP_PORT", "587");
-    private static final String SMTP_USER = System.getenv().getOrDefault("SCAD_SMTP_USER", "scad.teste@rsig.gov.mz");
-    private static final String SMTP_PASSWORD = System.getenv().getOrDefault("SCAD_SMTP_PASSWORD", "Passw0rd");
-    private static final String SMTP_STARTTLS = System.getenv().getOrDefault("SCAD_SMTP_STARTTLS", "true");
-    private static final String SMTP_AUTH = System.getenv().getOrDefault("SCAD_SMTP_AUTH", "true");
-    private static final String SMTP_SSL_CHECK_SERVER_IDENTITY = System.getenv().getOrDefault("SCAD_SMTP_SSL_CHECK_SERVER_IDENTITY", "false");
+
+    private static String TWILIO_ACCOUNT_SID = System.getenv().getOrDefault("TWILIO_ACCOUNT_SID", "");
+    private static String TWILIO_AUTH_TOKEN = System.getenv().getOrDefault("TWILIO_AUTH_TOKEN", "");
+    private static String TWILIO_MSID = System.getenv().getOrDefault("TWILIO_MSID", "");
+
+    private static String OZEKI_HOST = System.getenv().getOrDefault("OZEKI_HOST", "localhost");
+    private static int OZEKI_PORT = 9501;
+    private static String OZEKI_USERNAME = System.getenv().getOrDefault("OZEKI_USERNAME", "admin");
+    private static String OZEKI_PASSWORD = System.getenv().getOrDefault("OZEKI_PASSWORD", "");
+    private static int OZEKI_CONNECTION_TIMEOUT = 5000;
+
+    private static String SMTP_HOST = System.getenv().getOrDefault("SCAD_SMTP_HOST", "172.17.1.23");
+    private static String SMTP_PORT = System.getenv().getOrDefault("SCAD_SMTP_PORT", "587");
+    private static String SMTP_USER = System.getenv().getOrDefault("SCAD_SMTP_USER", "scad.teste@rsig.gov.mz");
+    private static String SMTP_PASSWORD = System.getenv().getOrDefault("SCAD_SMTP_PASSWORD", "Passw0rd");
+    private static String SMTP_STARTTLS = System.getenv().getOrDefault("SCAD_SMTP_STARTTLS", "true");
+    private static String SMTP_AUTH = System.getenv().getOrDefault("SCAD_SMTP_AUTH", "true");
+    private static String SMTP_SSL_CHECK_SERVER_IDENTITY = System.getenv()
+            .getOrDefault("SCAD_SMTP_SSL_CHECK_SERVER_IDENTITY", "false");
+
+    static {
+        try {
+            String kcHome = System.getProperty("kc.home.dir");
+            if (kcHome == null || kcHome.trim().isEmpty()) {
+                kcHome = System.getProperty("keycloak.home.dir", "/media/cipriano/BACKUP/KAYCLOAK/keycloak-26.6.2");
+            }
+            java.io.File configFile = new java.io.File(kcHome + "/conf/scad-config.yml");
+            if (configFile.exists()) {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper(
+                        new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> config = mapper.readValue(configFile, java.util.Map.class);
+
+                if (config.containsKey("sms")) {
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> sms = (java.util.Map<String, Object>) config.get("sms");
+                    SMS_PROVIDER = String.valueOf(sms.getOrDefault("provider", SMS_PROVIDER));
+                    try {
+                        SMS_MAX_RETRIES = Integer
+                                .parseInt(String.valueOf(sms.getOrDefault("max_retries", SMS_MAX_RETRIES)));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+
+                if (config.containsKey("twilio")) {
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> twilio = (java.util.Map<String, Object>) config.get("twilio");
+                    TWILIO_ACCOUNT_SID = String.valueOf(twilio.getOrDefault("account_sid", TWILIO_ACCOUNT_SID));
+                    TWILIO_AUTH_TOKEN = String.valueOf(twilio.getOrDefault("auth_token", TWILIO_AUTH_TOKEN));
+                    TWILIO_MSID = String.valueOf(twilio.getOrDefault("msid", TWILIO_MSID));
+                }
+
+                if (config.containsKey("ozeki")) {
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> ozeki = (java.util.Map<String, Object>) config.get("ozeki");
+                    OZEKI_HOST = String.valueOf(ozeki.getOrDefault("host", OZEKI_HOST));
+                    OZEKI_USERNAME = String.valueOf(ozeki.getOrDefault("username", OZEKI_USERNAME));
+                    OZEKI_PASSWORD = String.valueOf(ozeki.getOrDefault("password", OZEKI_PASSWORD));
+                    try {
+                        OZEKI_PORT = Integer.parseInt(String.valueOf(ozeki.getOrDefault("port", OZEKI_PORT)));
+                        OZEKI_CONNECTION_TIMEOUT = Integer.parseInt(
+                                String.valueOf(ozeki.getOrDefault("connection_timeout", OZEKI_CONNECTION_TIMEOUT)));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+
+                if (config.containsKey("smtp")) {
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> smtp = (java.util.Map<String, Object>) config.get("smtp");
+                    SMTP_HOST = String.valueOf(smtp.getOrDefault("host", SMTP_HOST));
+                    SMTP_PORT = String.valueOf(smtp.getOrDefault("port", SMTP_PORT));
+                    SMTP_USER = String.valueOf(smtp.getOrDefault("user", SMTP_USER));
+                    SMTP_PASSWORD = String.valueOf(smtp.getOrDefault("password", SMTP_PASSWORD));
+                    SMTP_STARTTLS = String.valueOf(smtp.getOrDefault("starttls", SMTP_STARTTLS));
+                    SMTP_AUTH = String.valueOf(smtp.getOrDefault("auth", SMTP_AUTH));
+                    SMTP_SSL_CHECK_SERVER_IDENTITY = String
+                            .valueOf(smtp.getOrDefault("ssl_check_server_identity", SMTP_SSL_CHECK_SERVER_IDENTITY));
+                }
+
+                logger.info("[SCAD] Configuration loaded from " + configFile.getAbsolutePath()
+                        + " | SMS provider: " + SMS_PROVIDER);
+            } else {
+                logger.info("[SCAD] Configuration file not found at " + configFile.getAbsolutePath()
+                        + " — using environment variables and defaults. SMS provider: " + SMS_PROVIDER);
+            }
+        } catch (Exception e) {
+            logger.log(java.util.logging.Level.SEVERE, "[SCAD] Failed to load scad-config.yml", e);
+        }
+    }
 
     public ScadResourceProvider(KeycloakSession session) {
         this.session = session;
@@ -49,8 +130,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response generateToken(ScadTokenRequest request) {
-        logger.info(String.format("Token generation request received: [Scope: %s, NUIT: %s, OrganicCode: %s, Contact: %s]", 
-                request.getScope(), request.getNuit(), request.getOrganicCode(), request.getContact()));
+        logger.info(
+                String.format("Token generation request received: [Scope: %s, NUIT: %s, OrganicCode: %s, Contact: %s]",
+                        request.getScope(), request.getNuit(), request.getOrganicCode(), request.getContact()));
 
         ClientModel client = session.getContext().getClient();
         if (client == null) {
@@ -63,9 +145,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
 
         String clientId = client.getClientId();
         String bankName = clientId.replace("-app", "")
-                                  .replace("-client", "")
-                                  .replace("-prod", "")
-                                  .toLowerCase();
+                .replace("-client", "")
+                .replace("-prod", "")
+                .toLowerCase();
 
         String scope = request.getScope();
         String operationType = "scad";
@@ -89,7 +171,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
 
         String finalToken = prefix + "-" + randomPart.toString();
 
-        logger.info(String.format("Token successfully generated for bank '%s' [Scope: %s]: %s", 
+        logger.info(String.format("Token successfully generated for bank '%s' [Scope: %s]: %s",
                 bankName, scope, finalToken));
 
         String contact = request.getContact();
@@ -102,7 +184,8 @@ public class ScadResourceProvider implements RealmResourceProvider {
                 isEmail = true;
                 int atIndex = contact.indexOf("@");
                 if (atIndex > 2) {
-                    maskedContact = contact.charAt(0) + "***" + contact.charAt(atIndex - 1) + contact.substring(atIndex);
+                    maskedContact = contact.charAt(0) + "***" + contact.charAt(atIndex - 1)
+                            + contact.substring(atIndex);
                 }
             } else {
                 if (contact.length() > 6) {
@@ -114,19 +197,20 @@ public class ScadResourceProvider implements RealmResourceProvider {
         if (isEmail) {
             enviarEmail(contact, finalToken, 15, false);
         } else {
-            enviarSMSViaTwilio(contact, finalToken, 15, false);
+            enviarSMS(contact, finalToken, 15, false);
         }
 
         String deliveryMethod = isEmail ? "email" : "SMS";
-        String confirmationMessage = String.format("The token was successfully sent via %s to contact %s", deliveryMethod, maskedContact);
+        String confirmationMessage = String.format("The token was successfully sent via %s to contact %s",
+                deliveryMethod, maskedContact);
 
         // Guardar token no SingleUseObjectProvider (Keycloak Cache de Uso Único)
         try {
             org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
-            
+
             String nuitVal = request.getNuit() != null ? request.getNuit().trim() : "";
             String organicVal = request.getOrganicCode() != null ? request.getOrganicCode().trim() : "";
-            
+
             if (!nuitVal.isEmpty() && !organicVal.isEmpty()) {
                 String nuitOrganicKey = "scad-nuit-organic-token:" + nuitVal + ":" + organicVal;
                 java.util.Map<String, String> oldDetails = singleUseObjects.get(nuitOrganicKey);
@@ -134,7 +218,8 @@ public class ScadResourceProvider implements RealmResourceProvider {
                     String oldToken = oldDetails.get("token");
                     if (oldToken != null) {
                         singleUseObjects.remove("scad-token:" + oldToken);
-                        logger.info("Revoked previous token for NUIT " + nuitVal + " and organicCode " + organicVal + ": " + oldToken);
+                        logger.info("Revoked previous token for NUIT " + nuitVal + " and organicCode " + organicVal
+                                + ": " + oldToken);
                     }
                 }
             }
@@ -171,10 +256,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
         }
 
         ScadTokenResponse response = new ScadTokenResponse(
-                finalToken, 
+                finalToken,
                 request.getNuit(),
-                confirmationMessage
-        );
+                confirmationMessage);
 
         return Response.ok(response).build();
     }
@@ -205,8 +289,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
 
         try {
             org.keycloak.models.SingleUseObjectProvider singleUseObjects = session.singleUseObjects();
-            
-            // Consumes the token atomically (remove returns the data if it existed, null if already consumed or expired)
+
+            // Consumes the token atomically (remove returns the data if it existed, null if
+            // already consumed or expired)
             java.util.Map<String, String> tokenDetails = singleUseObjects.remove(storeKey);
 
             if (tokenDetails == null || tokenDetails.isEmpty()) {
@@ -237,13 +322,13 @@ public class ScadResourceProvider implements RealmResourceProvider {
                     tokenDetails.getOrDefault("bank", ""),
                     tokenDetails.getOrDefault("clientId", ""),
                     tokenDetails.getOrDefault("timestamp", ""),
-                    "Token validated and consumed successfully. This token cannot be reused."
-            );
+                    "Token validated and consumed successfully. This token cannot be reused.");
 
             return Response.ok(response).build();
 
         } catch (Exception e) {
-            logger.log(java.util.logging.Level.SEVERE, "Error validating/removing token from SingleUseObjectProvider", e);
+            logger.log(java.util.logging.Level.SEVERE, "Error validating/removing token from SingleUseObjectProvider",
+                    e);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                     .entity("{\"error\": \"Internal error processing token validation\"}")
                     .type(MediaType.APPLICATION_JSON)
@@ -283,7 +368,8 @@ public class ScadResourceProvider implements RealmResourceProvider {
             java.util.Map<String, String> mappingDetails = singleUseObjects.get(nuitOrganicKey);
 
             if (mappingDetails == null || mappingDetails.isEmpty()) {
-                logger.warning("Resend attempt failed. No active token found for NUIT: " + nuit + " and organicCode: " + organicCode);
+                logger.warning("Resend attempt failed. No active token found for NUIT: " + nuit + " and organicCode: "
+                        + organicCode);
                 return Response.status(Response.Status.NOT_FOUND)
                         .entity("{\"error\": \"No active token found for the provided NUIT and organicCode\"}")
                         .type(MediaType.APPLICATION_JSON)
@@ -302,7 +388,9 @@ public class ScadResourceProvider implements RealmResourceProvider {
             java.util.Map<String, String> tokenDetails = singleUseObjects.get(storeKey);
 
             if (tokenDetails == null || tokenDetails.isEmpty()) {
-                logger.warning("Resend attempt failed. Token mapped to NUIT/organicCode is invalid or expired in cache: " + token);
+                logger.warning(
+                        "Resend attempt failed. Token mapped to NUIT/organicCode is invalid or expired in cache: "
+                                + token);
                 // Clean up stale mapping
                 singleUseObjects.remove(nuitOrganicKey);
                 return Response.status(Response.Status.NOT_FOUND)
@@ -311,11 +399,13 @@ public class ScadResourceProvider implements RealmResourceProvider {
                         .build();
             }
 
-            // Verify if the client calling resend is the same client that generated the token originally
+            // Verify if the client calling resend is the same client that generated the
+            // token originally
             String originalClientId = tokenDetails.get("clientId");
             String currentClientId = client.getClientId();
             if (originalClientId != null && !originalClientId.equals(currentClientId)) {
-                logger.warning(String.format("Unauthorized resend attempt: client '%s' tried to resend token generated by client '%s'", 
+                logger.warning(String.format(
+                        "Unauthorized resend attempt: client '%s' tried to resend token generated by client '%s'",
                         currentClientId, originalClientId));
                 return Response.status(Response.Status.FORBIDDEN)
                         .entity("{\"error\": \"You do not have permission to resend this token\"}")
@@ -334,7 +424,8 @@ public class ScadResourceProvider implements RealmResourceProvider {
                     isEmail = true;
                     int atIndex = contact.indexOf("@");
                     if (atIndex > 2) {
-                        maskedContact = contact.charAt(0) + "***" + contact.charAt(atIndex - 1) + contact.substring(atIndex);
+                        maskedContact = contact.charAt(0) + "***" + contact.charAt(atIndex - 1)
+                                + contact.substring(atIndex);
                     }
                 } else {
                     if (contact.length() > 6) {
@@ -363,20 +454,21 @@ public class ScadResourceProvider implements RealmResourceProvider {
             if (isEmail) {
                 enviarEmail(contact, token, remainingMinutes, true);
             } else {
-                enviarSMSViaTwilio(contact, token, remainingMinutes, true);
+                enviarSMS(contact, token, remainingMinutes, true);
             }
 
             String deliveryMethod = isEmail ? "email" : "SMS";
-            String confirmationMessage = String.format("The token was successfully resent via %s to contact %s (Valid for %d min.)", deliveryMethod, maskedContact, remainingMinutes);
+            String confirmationMessage = String.format(
+                    "The token was successfully resent via %s to contact %s (Valid for %d min.)", deliveryMethod,
+                    maskedContact, remainingMinutes);
 
-            logger.info(String.format("Token successfully resent for client '%s' and NUIT '%s' to '%s'", 
+            logger.info(String.format("Token successfully resent for client '%s' and NUIT '%s' to '%s'",
                     currentClientId, nuit, maskedContact));
 
             ScadTokenResponse response = new ScadTokenResponse(
-                    token, 
+                    token,
                     nuit,
-                    confirmationMessage
-            );
+                    confirmationMessage);
 
             return Response.ok(response).build();
 
@@ -389,11 +481,12 @@ public class ScadResourceProvider implements RealmResourceProvider {
         }
     }
 
-
     private void enviarSMSViaTwilio(String telefone, String token, long remainingMinutes, boolean isResend) {
         String prefix = isResend ? "Token reenviado. " : "";
-        String mensagem = prefix + "O seu código de validação para confirmar a solicitação de crédito é: " + token + ". Este código é válido por " + remainingMinutes + " minutos. Não o partilhe com ninguém. Se não efetuou esta solicitação, ignore esta mensagem.";
-        
+        String mensagem = prefix + "O seu código de validação para confirmar a solicitação de crédito é: " + token
+                + ". Este código é válido por " + remainingMinutes
+                + " minutos. Não o partilhe com ninguém. Se não efectuou esta solicitação, ignore esta mensagem.";
+
         // Ensure the phone number is in E.164 format (starts with '+' and country code)
         String formattedTelefone = telefone != null ? telefone.trim() : "";
         if (formattedTelefone.length() == 9 && formattedTelefone.matches("^[8|2]\\d{8}$")) {
@@ -401,7 +494,7 @@ public class ScadResourceProvider implements RealmResourceProvider {
         } else if (!formattedTelefone.startsWith("+")) {
             formattedTelefone = "+" + formattedTelefone;
         }
-        
+
         final String finalTelefone = formattedTelefone;
 
         try {
@@ -415,7 +508,8 @@ public class ScadResourceProvider implements RealmResourceProvider {
 
             HttpClient client = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.twilio.com/2010-04-01/Accounts/" + TWILIO_ACCOUNT_SID + "/Messages.json"))
+                    .uri(URI.create(
+                            "https://api.twilio.com/2010-04-01/Accounts/" + TWILIO_ACCOUNT_SID + "/Messages.json"))
                     .header("Authorization", authHeader)
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(urlParameters))
@@ -424,9 +518,11 @@ public class ScadResourceProvider implements RealmResourceProvider {
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
                         if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                            logger.info("TWILIO: SMS enviado com sucesso para " + finalTelefone + " | Status: " + response.statusCode());
+                            logger.info("TWILIO: SMS enviado com sucesso para " + finalTelefone + " | Status: "
+                                    + response.statusCode());
                         } else {
-                            logger.severe("TWILIO: Falha ao enviar SMS para " + finalTelefone + ". Status: " + response.statusCode() + " | Resposta: " + response.body());
+                            logger.severe("TWILIO: Falha ao enviar SMS para " + finalTelefone + ". Status: "
+                                    + response.statusCode() + " | Resposta: " + response.body());
                         }
                     })
                     .exceptionally(ex -> {
@@ -439,10 +535,61 @@ public class ScadResourceProvider implements RealmResourceProvider {
         }
     }
 
+    /**
+     * Unified SMS dispatcher. Routes to Ozeki (production) or Twilio (test)
+     * according to the {@code sms.provider} value in scad-config.yml.
+     */
+    private void enviarSMS(String telefone, String token, long remainingMinutes, boolean isResend) {
+        switch (SMS_PROVIDER.trim().toLowerCase()) {
+            case "ozeki":
+                enviarSMSViaOzeki(telefone, token, remainingMinutes, isResend);
+                break;
+            case "twilio":
+                enviarSMSViaTwilio(telefone, token, remainingMinutes, isResend);
+                break;
+            default:
+                logger.severe("[SCAD] Unknown SMS provider '" + SMS_PROVIDER
+                        + "'. Check sms.provider in scad-config.yml. Falling back to Twilio.");
+                enviarSMSViaTwilio(telefone, token, remainingMinutes, isResend);
+        }
+    }
+
+    /**
+     * Sends an SMS via Ozeki NG (production environment).
+     */
+    private void enviarSMSViaOzeki(String telefone, String token, long remainingMinutes, boolean isResend) {
+        String prefix = isResend ? "Token reenviado. " : "";
+        String mensagem = prefix + "O seu código de validação para confirmar a solicitação de crédito é: " + token
+                + ". Este código é válido por " + remainingMinutes
+                + " minutos. Não o partilhe com ninguém. Se não efectuou esta solicitação, ignore esta mensagem.";
+
+        // Ozeki uses the local number format — strip leading '+' if present
+        String formattedTelefone = telefone != null ? telefone.trim() : "";
+
+        final String finalTelefone = formattedTelefone;
+
+        CompletableFuture.runAsync(() -> {
+            mz.gov.cedsif.scad.keycloak.sms.OzekiSmsSender sender = new mz.gov.cedsif.scad.keycloak.sms.OzekiSmsSender(
+                    OZEKI_HOST, OZEKI_PORT, OZEKI_USERNAME, OZEKI_PASSWORD, OZEKI_CONNECTION_TIMEOUT);
+            try {
+                sender.send(finalTelefone, mensagem, SMS_MAX_RETRIES);
+                logger.info("OZEKI: SMS enviado com sucesso para " + finalTelefone);
+            } catch (Exception e) {
+                logger.log(java.util.logging.Level.SEVERE,
+                        "OZEKI: Falha ao enviar SMS para " + finalTelefone, e);
+            } finally {
+                sender.disconnect();
+            }
+        });
+    }
+
     private void enviarEmail(String email, String token, long remainingMinutes, boolean isResend) {
         String prefix = isResend ? "Token reenviado. " : "";
-        String subject = isResend ? "Serviço SCAD - Reenvio de Token de Autorização" : "Serviço SCAD - Token de Autorização";
-        String textBody = prefix + "O seu código de validação para confirmar a solicitação de crédito é: " + token + ". Este código é válido por " + remainingMinutes + " minutos. Não o partilhe com ninguém. Se não efetuou esta solicitação, ignore esta mensagem.";
+        String subject = isResend ? "Serviço SCAD - Reenvio de Token de Autorização"
+                : "Serviço SCAD - Token de Autorização";
+        String textBody = prefix + "O seu código de validação para confirmar a solicitação de crédito é: " + token
+                + ". Este código é válido por " + remainingMinutes
+                + " minutos. Não o partilhe com ninguém. Se não efectuou esta solicitação, ignore esta mensagem.";
 
         logger.info(String.format("Iniciando envio de email para %s (Assunto: %s)", email, subject));
 
@@ -457,16 +604,18 @@ public class ScadResourceProvider implements RealmResourceProvider {
                 prop.put("mail.smtp.ssl.protocols", "TLSv1.2 TLSv1.3");
                 prop.put("mail.smtp.ssl.checkserveridentity", SMTP_SSL_CHECK_SERVER_IDENTITY);
 
-                jakarta.mail.Session mailSession = jakarta.mail.Session.getInstance(prop, new jakarta.mail.Authenticator() {
-                    @Override
-                    protected jakarta.mail.PasswordAuthentication getPasswordAuthentication() {
-                        return new jakarta.mail.PasswordAuthentication(SMTP_USER, SMTP_PASSWORD);
-                    }
-                });
+                jakarta.mail.Session mailSession = jakarta.mail.Session.getInstance(prop,
+                        new jakarta.mail.Authenticator() {
+                            @Override
+                            protected jakarta.mail.PasswordAuthentication getPasswordAuthentication() {
+                                return new jakarta.mail.PasswordAuthentication(SMTP_USER, SMTP_PASSWORD);
+                            }
+                        });
 
                 jakarta.mail.internet.MimeMessage message = new jakarta.mail.internet.MimeMessage(mailSession);
                 message.setFrom(new jakarta.mail.internet.InternetAddress(SMTP_USER));
-                message.setRecipients(jakarta.mail.Message.RecipientType.TO, jakarta.mail.internet.InternetAddress.parse(email));
+                message.setRecipients(jakarta.mail.Message.RecipientType.TO,
+                        jakarta.mail.internet.InternetAddress.parse(email));
                 message.setSubject(subject, "UTF-8");
                 message.setText(textBody, "UTF-8");
 
