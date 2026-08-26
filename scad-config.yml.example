@@ -1,0 +1,37 @@
+# =====================================================================
+# SCAD Keycloak Plugin - Configuração
+#
+# Ficheiro: keycloak-26.x.x/conf/scad-config.yml
+#
+# sms.provider:
+#   "twilio" → usar em ambiente de TESTE
+#   "ozeki"  → usar em ambiente de PRODUÇÃO
+# =====================================================================
+
+sms:
+  provider: "twilio"          # valores aceites: "twilio" | "ozeki"
+  max_retries: 3
+
+# ── Twilio (ambiente de TESTE) ────────────────────────────────────────
+twilio:
+  account_sid: "YOUR_TWILIO_ACCOUNT_SID"
+  auth_token: "YOUR_TWILIO_AUTH_TOKEN"
+  msid: "YOUR_TWILIO_MESSAGING_SERVICE_SID"
+
+# ── Ozeki (ambiente de PRODUÇÃO) ─────────────────────────────────────
+ozeki:
+  host: "172.17.1.100"        # endereço do servidor Ozeki NG
+  port: 9501                  # porta do Ozeki NG (por omissão 9501)
+  username: "admin"
+  password: "Passw0rd"
+  connection_timeout: 5000    # ms
+
+# ── SMTP (email) ──────────────────────────────────────────────────────
+smtp:
+  host: "172.17.1.23"
+  port: "587"
+  user: "scad.teste@rsig.gov.mz"
+  password: "Passw0rd"
+  starttls: "true"
+  auth: "true"
+  ssl_check_server_identity: "false"
