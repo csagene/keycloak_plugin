@@ -71,11 +71,29 @@ public class OzekiSmsManager {
         while (attempts <= maxRetries) {
             lock.lock();
             try {
-                ensureLoggedIn(receiver, attempts);
-                client.sendMessage(receiver, message);
-                LOGGER.info("SMS successfully sent to {} on attempt {}/{}", 
-                           receiver, attempts, maxRetries);
-                return;
+                // Ensure we use the HTTP API port (usually 9501 if 9500 is specified in config)
+                int httpPort = (smsPort == 9500) ? 9501 : smsPort;
+                String encodedMessage = java.net.URLEncoder.encode(message, "UTF-8");
+                String urlStr = String.format("http://%s:%d/api?action=sendmessage&username=%s&password=%s&recipient=%s&messagedata=%s",
+                        smsHostName, httpPort, smsUserName, smsPassword, receiver, encodedMessage);
+                
+                String curlCommand = String.format("curl \"%s\"", urlStr);
+                LOGGER.info("Executing Ozeki SMS request: {}", curlCommand);
+                
+                java.net.URL url = new java.net.URL(urlStr);
+                java.net.HttpURLConnection con = (java.net.HttpURLConnection) url.openConnection();
+                con.setRequestMethod("GET");
+                con.setConnectTimeout(connectionTimeout);
+                con.setReadTimeout(connectionTimeout);
+                
+                int responseCode = con.getResponseCode();
+                if (responseCode == 200) {
+                    LOGGER.info("SMS successfully sent to {} on attempt {}/{}", 
+                               receiver, attempts, maxRetries);
+                    return;
+                } else {
+                    throw new IOException("HTTP Response Code: " + responseCode);
+                }
                 
             } catch (Exception e) {
                 if (attempts >= maxRetries) {

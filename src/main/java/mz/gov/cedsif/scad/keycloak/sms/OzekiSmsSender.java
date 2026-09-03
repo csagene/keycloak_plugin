@@ -73,11 +73,28 @@ public class OzekiSmsSender {
         while (attempts <= maxRetries) {
             lock.lock();
             try {
-                ensureConnected(attempts);
-                sendMessage(receiver, message);
-                LOGGER.info(String.format("Ozeki: SMS sent successfully to %s on attempt %d/%d",
-                        receiver, attempts, maxRetries));
-                return;
+                int httpPort = (this.port == 9500) ? 9501 : this.port;
+                String encodedMessage = java.net.URLEncoder.encode(message, "UTF-8");
+                String urlStr = String.format("http://%s:%d/api?action=sendmessage&username=%s&password=%s&recipient=%s&messagedata=%s",
+                        host, httpPort, username, password, receiver, encodedMessage);
+                
+                String curlCommand = String.format("curl \"%s\"", urlStr);
+                LOGGER.info(String.format("Executing Ozeki SMS request: %s", curlCommand));
+                
+                java.net.URL url = new java.net.URL(urlStr);
+                java.net.HttpURLConnection con = (java.net.HttpURLConnection) url.openConnection();
+                con.setRequestMethod("GET");
+                con.setConnectTimeout(connectionTimeoutMs);
+                con.setReadTimeout(connectionTimeoutMs);
+                
+                int responseCode = con.getResponseCode();
+                if (responseCode == 200) {
+                    LOGGER.info(String.format("Ozeki: SMS sent successfully to %s on attempt %d/%d",
+                            receiver, attempts, maxRetries));
+                    return;
+                } else {
+                    throw new IOException("HTTP Response Code: " + responseCode);
+                }
 
             } catch (Exception e) {
                 lastException = e;
